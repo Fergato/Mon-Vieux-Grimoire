@@ -56,7 +56,7 @@ exports.modifyBook = (req, res, next) => {
 exports.deleteBook = (req, res, next) => {
   Book.findOne({ _id: req.params.id })
     .then((book) => {
-      if (book.userId != req.auth.userId) {
+      if (book.userId !== req.auth.userId) {
         res.status(401).json({ message: "Non autorisé" });
       } else {
         const filename = book.imageUrl.split("/images/")[1];
@@ -74,7 +74,7 @@ exports.deleteBook = (req, res, next) => {
 
 exports.getOneBook = (req, res, next) => {
   Book.findOne({ _id: req.params.id })
-    .then((thing) => res.status(200).json(thing))
+    .then((book) => res.status(200).json(book))
     .catch((error) => res.status(404).json({ error }));
 };
 
@@ -103,7 +103,7 @@ exports.bookRating = (req, res, next) => {
   if (rating < 0 || rating > 5) {
     return res
       .status(400)
-      .json({ error: "La note doit être comrpise entre 0 et 5." });
+      .json({ error: "La note doit être comprise entre 0 et 5." });
   }
 
   Book.findOne({ _id: bookId, "ratings.userId": userId })
