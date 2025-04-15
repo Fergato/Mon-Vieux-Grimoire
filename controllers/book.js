@@ -1,9 +1,9 @@
 const Book = require("../models/Book");
+const User = require("../models/User");
 const fs = require("fs");
 
 exports.createBook = (req, res, next) => {
   const bookObject = JSON.parse(req.body.book);
-  delete bookObject._id;
   delete bookObject.userId;
   const book = new Book({
     ...bookObject,
@@ -32,8 +32,6 @@ exports.modifyBook = (req, res, next) => {
         }`,
       }
     : { ...req.body };
-
-  // delete bookObject._userId;
 
   Book.findOne({ _id: bookId })
     .then((book) => {
@@ -96,9 +94,10 @@ exports.getBestRatedBooks = (req, res, next) => {
     });
 };
 
-exports.bookRating = (req, res, next) => {
+exports.bookRating = async (req, res, next) => {
   const bookId = req.params.id;
-  const { userId, rating } = req.body;
+  const rating = req.body.rating;
+  const userId = req.auth.userId;
 
   if (rating < 0 || rating > 5) {
     return res
@@ -106,37 +105,32 @@ exports.bookRating = (req, res, next) => {
       .json({ error: "La note doit être comprise entre 0 et 5." });
   }
 
-  Book.findOne({ _id: bookId, "ratings.userId": userId })
-    .then((book) => {
-      if (book) {
-        return res.status(400).json({ error: "Vous avez déja noté ce livre." });
-      }
+  try {
+    const user = await User.findById(userId);
+    if (!user) {
+      return res.status(404).json({ error: "Utilisateur non existant." });
+    }
 
-      Book.updateOne(
-        { _id: bookId },
-        { $push: { ratings: { userId, grade: rating } } }
-      )
-        .then(() => {
-          Book.findById(bookId)
-            .then((updatedBook) => {
-              const ratings = updatedBook.ratings;
-              const totalRating = ratings.reduce(
-                (sum, rating) => sum + rating.grade,
-                0
-              );
-              const averageRating = totalRating / ratings.length;
+    const rated = await Book.findOne({ _id: bookId, "ratings.userId": userId });
+    if (rated) {
+      return res.status(400).json({ error: "Vous avez déja noté ce livre." });
+    }
 
-              updatedBook.averageRating = Math.floor(averageRating);
-              updatedBook
-                .save()
-                .then(() => {
-                  res.status(200).json(updatedBook);
-                })
-                .catch((error) => res.status(500).json({ error }));
-            })
-            .catch((error) => res.status(500).json({ error }));
-        })
-        .catch((error) => res.status(500).json({ error }));
-    })
-    .catch((error) => res.status(500).json({ error }));
+    await Book.updateOne(
+      { _id: bookId },
+      { $push: { ratings: { userId, grade: rating } } }
+    );
+
+    const updatedBook = await Book.findById(bookId);
+
+    const ratings = updatedBook.ratings;
+    const totalRating = ratings.reduce((sum, rating) => sum + rating.grade, 0);
+    const averageRating = totalRating / ratings.length;
+
+    updatedBook.averageRating = Math.floor(averageRating);
+    await updatedBook.save();
+    return res.status(200).json(updatedBook);
+  } catch (error) {
+    return res.status(500).json({ error: "Une erreur est survenue." });
+  }
 };
